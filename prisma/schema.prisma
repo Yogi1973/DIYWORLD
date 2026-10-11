@@ -1,0 +1,149 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Category {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  slug      String     @unique
+  icon      String
+  description String
+  products  Product[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([slug])
+}
+
+model Product {
+  id              String     @id @default(cuid())
+  name            String
+  slug            String     @unique
+  categoryId      String
+  category        Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  priceInPaise    Int        // Store price in paise (₹1 = 100 paise) for precision
+  originalPriceInPaise Int?  // Original price for discount calculation
+  discount        Int        @default(0) // Discount percentage
+  stock           Int        @default(0)
+  featured        Boolean    @default(false)
+  trending        Boolean    @default(false)
+  image           String     // URL to product image
+  shortDescription String
+  description     String
+  features        String[]   // JSON array of feature strings
+  rating          Float      @default(0)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  orderItems      OrderItem[]
+
+  @@index([categoryId])
+  @@index([slug])
+  @@index([featured])
+  @@index([trending])
+}
+
+model Customer {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  name      String
+  phone     String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  orders    Order[]
+
+  @@index([email])
+}
+
+model Order {
+  id              String     @id @default(cuid())
+  orderNumber     String     @unique // User-friendly order ID like "ORD-20261011-00001"
+  customerId      String
+  customer        Customer   @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  
+  // Shipping address snapshot at order time
+  shippingName    String
+  shippingPhone   String
+  shippingEmail   String
+  shippingStreet  String
+  shippingCity    String
+  shippingState   String
+  shippingPostal  String
+  shippingCountry String     @default("India")
+  
+  // Order totals in paise
+  subtotalInPaise Int
+  shippingInPaise Int        @default(0)
+  taxInPaise      Int        @default(0)
+  totalInPaise    Int
+  
+  // Order and payment status
+  status          OrderStatus @default(PENDING)
+  paymentStatus   PaymentStatus @default(UNPAID)
+  paymentMethod   PaymentMethod @default(COD)
+  
+  // Razorpay or payment reference
+  paymentId       String?    // External payment ID from Razorpay
+  paymentSignature String?   // Razorpay signature for verification
+  
+  // Items
+  items           OrderItem[]
+  
+  // Timestamps
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([customerId])
+  @@index([orderNumber])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id            String     @id @default(cuid())
+  orderId       String
+  order         Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product    @relation(fields: [productId], references: [id], onDelete: Restrict)
+  
+  // Snapshot of product details at order time
+  productName   String
+  productPrice  Int        // Price in paise at time of order
+  quantity      Int
+  subtotal      Int        // quantity * price in paise
+
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+enum OrderStatus {
+  PENDING       // Order created, awaiting payment
+  CONFIRMED     // Payment received, order confirmed
+  PROCESSING    // Being prepared for shipment
+  SHIPPED       // In transit
+  DELIVERED     // Successfully delivered
+  CANCELLED     // Order cancelled
+}
+
+enum PaymentStatus {
+  UNPAID        // No payment received
+  PAID          // Payment successful
+  FAILED        // Payment failed
+  REFUNDED      // Payment refunded
+}
+
+enum PaymentMethod {
+  COD           // Cash on Delivery
+  RAZORPAY      // Online payment via Razorpay
+}
